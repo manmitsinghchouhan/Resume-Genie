@@ -66,4 +66,4 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 
 ## Author
 - Manmit Singh Chouhan  
-  [GitHub](https://github.com/manmitsinghchouhan) | [LinkedIn](https://www.linkedin.com/in/manmit-singh-chouhan-44a3482b8/)
+  [GitHub](https://github.com/manmitsinghchouhan) | [LinkedIn](https://www.linkedin.com/in/manmit-singh-chouhan)
