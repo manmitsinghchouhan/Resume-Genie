@@ -43,8 +43,8 @@ This is a Python and Streamlit web application that analyzes resume PDFs to prov
 
 ## Demo
 
-![Skills Screenshot](Logo/skills.png)
-![User Interface](Logo/user_interface.png)
+![Skills Screenshot](Logo/image/skills.png)
+![User Interface](Logo/image/user_interface.png)
 
 ## Technologies Used
 * **Frontend:** Streamlit
