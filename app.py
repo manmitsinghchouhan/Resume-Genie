@@ -3,7 +3,6 @@ import pandas as pd
 import base64, random
 import time, datetime
 
-from streamlit_tags import st_tags
 from PIL import Image
 import pymysql
 import plotly.express as px
