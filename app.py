@@ -1,27 +1,36 @@
-
 import streamlit as st
 import pandas as pd
 import base64,random
 import time,datetime
-#libraries to parse the resume pdf files
+
 from pyresparser import ResumeParser
-from pdfminer.layout import LAParams, LTTextBox
+from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
-from pdfminer.pdfinterp import PDFResourceManager
-from pdfminer.pdfinterp import PDFPageInterpreter
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
-import io,random
+
+import io
 from streamlit_tags import st_tags
 from PIL import Image
 import pymysql
-from Courses import ds_course,web_course,android_course,ios_course,uiux_course,resume_videos,interview_videos
-# import pafy #for uploading youtube videos
-import plotly.express as px #to create visualisations at the admin session
-import nltk
-nltk.download('stopwords')
-import random
-import yt_dlp
 
+from Courses import ds_course,web_course,android_course,ios_course,uiux_course,resume_videos,interview_videos
+
+import plotly.express as px
+import nltk
+from nltk.corpus import stopwords
+import yt_dlp
+import spacy
+
+from spacy.cli import download
+download("en_core_web_sm")
+nlp = spacy.load("en_core_web_sm")
+
+
+st.set_page_config(
+   page_title="Resume Genie",
+   page_icon='./Logo/logo1.1.png',
+)
 
 def fetch_yt_video(link):
     try:
@@ -109,26 +118,50 @@ def display_random_video(video_list, section_title):
 
 #CONNECT TO DATABASE
 
-connection = pymysql.connect(
-    host=st.secrets["database"]["host"],
-    user=st.secrets["database"]["user"],
-    password=st.secrets["database"]["password"],
-    db=st.secrets["database"]["db"]
-)
+@st.cache_resource
+def get_connection():
+    return pymysql.connect(
+        host=st.secrets["database"]["host"],
+        port=int(st.secrets["database"]["port"]),
+        user=st.secrets["database"]["user"],
+        password=st.secrets["database"]["password"],
+        db=st.secrets["database"]["db"]
+    )
+connection = get_connection()
 cursor = connection.cursor()
 
-def insert_data(name,email,res_score,timestamp,no_of_pages,reco_field,cand_level,skills,recommended_skills,courses):
+
+def insert_data(name, email, contact, resume_file_name, res_score, timestamp,
+                no_of_pages, reco_field, cand_level, skills,
+                recommended_skills, courses):
+
     DB_table_name = 'user_data'
-    insert_sql = "insert into " + DB_table_name + """
-    values (0,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
-    rec_values = (name, email, str(res_score), timestamp,str(no_of_pages), reco_field, cand_level, skills,recommended_skills,courses)
+
+    insert_sql = "INSERT INTO " + DB_table_name + """
+        VALUES (0,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+    """
+
+    rec_values = (
+        name,
+        email,
+        contact,
+        resume_file_name,
+        str(res_score),
+        timestamp,
+        str(no_of_pages),
+        reco_field,
+        cand_level,
+        skills,
+        recommended_skills,
+        courses
+    )
+
     cursor.execute(insert_sql, rec_values)
     connection.commit()
 
-st.set_page_config(
-   page_title="Resume Genie",
-   page_icon='./Logo/logo1.1.png',
-)
+
+
+
 
 # st.markdown('<style>[data-testid=stAppViewContainer]{background-color:white;}.st-emotion-cache-1jicfl2{padding-top:0.5rem;}.st-emotion-cache-zt5igj{left:calc(-3rem);}</style>', unsafe_allow_html=True)
 def run():
@@ -139,8 +172,6 @@ def run():
     
 
 
-
-
     st.sidebar.markdown("# Choose User")
     activities = ["User", "Admin"]
     choice = st.sidebar.selectbox("Choose among the given options:", activities)
@@ -148,27 +179,28 @@ def run():
     st.sidebar.markdown(link, unsafe_allow_html=True)
 
 
-    # Create the DB
-    db_sql = """CREATE DATABASE IF NOT EXISTS CV;"""
-    cursor.execute(db_sql)
+
 
     # Create table
     DB_table_name = 'user_data'
-    table_sql = "CREATE TABLE IF NOT EXISTS " + DB_table_name + """
-                     (ID INT NOT NULL AUTO_INCREMENT,
-                       Name varchar(500) NOT NULL,
-                       Email_ID VARCHAR(500) NOT NULL,
-                       resume_score VARCHAR(8) NOT NULL,
-                       Timestamp VARCHAR(50) NOT NULL,
-                       Page_no VARCHAR(5) NOT NULL,
-                       Predicted_Field TEXT NOT NULL,      
-                       User_level TEXT NOT NULL,           
-                       Actual_skills TEXT NOT NULL,        
-                       Recommended_skills TEXT NOT NULL,   
-                       Recommended_courses TEXT NOT NULL,  
-                       PRIMARY KEY (ID));
-                     """
-    cursor.execute(table_sql)
+    table_sql = """
+    CREATE TABLE IF NOT EXISTS user_data(
+        ID INT NOT NULL AUTO_INCREMENT,
+        Name VARCHAR(500) NOT NULL,
+        Email_ID VARCHAR(500) NOT NULL,
+        Contact_Number VARCHAR(20),
+        Resume_File_Name VARCHAR(300),
+        resume_score VARCHAR(8) NOT NULL,
+        Timestamp VARCHAR(50) NOT NULL,
+        Page_no VARCHAR(5) NOT NULL,
+        Predicted_Field TEXT NOT NULL,
+        User_level TEXT NOT NULL,
+        Actual_skills TEXT NOT NULL,
+        Recommended_skills TEXT NOT NULL,
+        Recommended_courses TEXT NOT NULL,
+        PRIMARY KEY (ID)
+    );
+    """
     cursor.execute(table_sql)
     if choice == 'User':
         st.markdown('<h6 style="text-align: left; color: white; background: linear-gradient(90deg, #4F46E5 0%, #00C2FF 50%, #4F46E5 100%); padding: 8px 12px; border-radius: 6px; font-family: \'Poppins\', sans-serif; font-weight: 600; margin: 8px 0; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 0 8px rgba(79, 70, 229, 0.4); text-shadow: 0 0 4px rgba(0, 194, 255, 0.3); font-size: 1em;">🧞‍♂️ Let the Genie Reveal Hidden Career Opportunities — Upload Your Resume Now!💨</h6>', unsafe_allow_html=True)
@@ -178,8 +210,10 @@ def run():
             del st.session_state["resume_path"]
         if pdf_file is not None:
             with st.spinner('Uploading your Resume...'):
-                time.sleep(4)
+                time.sleep(1)
             save_image_path = './Uploaded_Resumes/'+pdf_file.name
+            resume_file_name = pdf_file.name
+
             with open(save_image_path, "wb") as f:
                 f.write(pdf_file.getbuffer())
             show_pdf(save_image_path)
@@ -237,20 +271,80 @@ def run():
 
                 
                 # --- Display User's Current Skills ---
-                st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🔧 Your Current Skills</h3>', unsafe_allow_html=True)
-                keywords = st_tags(label='', text='See our skills recommendation below', value=resume_data['skills'], key='1')
-                
                 # --- Skill-based Recommendation Logic ---
-                ds_keyword = ['tensorflow', 'keras', 'pytorch', 'machine learning', 'deep learning', 'flask', 'streamlit']
-                web_keyword = ['react', 'django', 'node js', 'react js', 'php', 'laravel', 'magento', 'wordpress',
-                               'javascript', 'angular js', 'c#', 'flask']
-                android_keyword = ['android', 'android development', 'flutter', 'kotlin', 'xml', 'kivy']
-                ios_keyword = ['ios', 'ios development', 'swift', 'cocoa', 'cocoa touch', 'xcode']
-                uiux_keyword = ['ux', 'adobe xd', 'figma', 'zeplin', 'balsamiq', 'ui', 'prototyping', 'wireframes',
-                                'storyframes', 'adobe photoshop', 'photoshop', 'editing', 'adobe illustrator', 'illustrator',
-                                'adobe after effects', 'after effects', 'adobe premier pro', 'premier pro', 'adobe indesign',
-                                'indesign', 'wireframe', 'solid', 'grasp', 'user research', 'user experience']
+                                # --- Skill-based Recommendation Logic ---
+                ds_keyword = [
+                    'machine learning', 'deep learning', 'ml', 'dl',
+                    'artificial intelligence', 'ai',
+                    'tensorflow', 'keras', 'pytorch', 'scikit', 'sklearn',
+                    'data analysis', 'data analytics',
+                    'statistics', 'data science',
+                    'nlp', 'computer vision',
+                    'streamlit', 'flask',  
+                    'numpy', 'pandas', 'matplotlib', 'seaborn'
+                ]
+
+                web_keyword = [
+                    'react', 'react js', 'reactjs',
+                    'javascript', 'js', 'typescript',
+                    'html', 'css', 'bootstrap', 'tailwind',
+                    
+                    'node js', 'node.js', 'nodejs',
+                    'express', 'express js', 'expressjs',
+                    
+                    'django', 'flask',
+                    'php', 'laravel', 'wordpress', 'magento',
+                    
+                    'frontend', 'backend', 'full stack', 'fullstack',
+                    
+                    'api', 'rest api', 'restful', 'jwt',
+                    'mysql', 'postgresql', 'sql', 
+                    
+                    'vite', 'webpack'
+                ]
+
+                android_keyword = [
+                    'android', 'android development',
+                    'kotlin', 'java', 'xml',
+                    'flutter', 'dart',
+                    'kivy', 'sdk'
+                ]
+
+                ios_keyword = [
+                    'ios', 'swift', 'swiftui',
+                    'objective-c',
+                    'xcode', 'cocoa', 'cocoa touch',
+                    'storekit', 'uikit'
+                ]
+
+                uiux_keyword = [
+                    'ui', 'ux', 'ui/ux',
+                    'figma', 'adobe xd', 'photoshop', 'illustrator',
+                    'wireframe', 'prototype', 'mockup',
+                    'user research', 'design system',
+                ]
+
+                st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🔧 Your Current Skills</h3>', unsafe_allow_html=True)
+                # Get extracted skills (may be noisy)
+                raw_skills = resume_data.get('skills') or []
+                skills_list = []
                 
+                # Filter raw skills using our keyword lists
+                all_keywords = ds_keyword + web_keyword + android_keyword + ios_keyword + uiux_keyword
+                
+                for skill in raw_skills:
+                    s = skill.lower()
+                    if any(kw in s for kw in all_keywords):
+                        skills_list.append(skill)
+                
+                # If nothing matched, fallback to raw
+                if not skills_list:
+                    skills_list = raw_skills
+                
+                # Show cleaned skills
+                keywords = st_tags(label='', text='See our skills recommendation below', value=skills_list, key='1')
+
+
                 reco_field = ''
                 rec_course = ''
                 
@@ -258,22 +352,36 @@ def run():
                 scores = {'Data Science': 0, 'Web Development': 0, 'Android Development': 0, 'IOS Development': 0, 'UI-UX Development': 0}
                 
                 # 2. Loop through ALL skills and update scores
-                for skill in resume_data['skills']:
+                # SAFER SKILLS LIST
+                skills_list = resume_data.get('skills') or []
+                
+                # 2. Loop through ALL skills and update scores using substring match
+                for skill in skills_list:
                     skill_lower = skill.lower()
-                    if skill_lower in ds_keyword:
+                
+                    if any(kw in skill_lower for kw in ds_keyword):
                         scores['Data Science'] += 1
-                    if skill_lower in web_keyword:
+                
+                    if any(kw in skill_lower for kw in web_keyword):
                         scores['Web Development'] += 1
-                    if skill_lower in android_keyword:
+                
+                    if any(kw in skill_lower for kw in android_keyword):
                         scores['Android Development'] += 1
-                    if skill_lower in ios_keyword:
+                
+                    if any(kw in skill_lower for kw in ios_keyword):
                         scores['IOS Development'] += 1
-                    if skill_lower in uiux_keyword:
+                
+                    if any(kw in skill_lower for kw in uiux_keyword):
                         scores['UI-UX Development'] += 1
+                
                 
                 # 3. Find the field with the highest score
                 # Check if there are any matches at all
                 if max(scores.values()) > 0:
+                    reco_field = ""
+                    recommended_skills = []
+                    rec_course = []
+
                     reco_field = max(scores, key=scores.get)
                 
                     # 4. Display the recommendation for the winning field
@@ -281,31 +389,74 @@ def run():
                 
                     if reco_field == 'Data Science':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">✨ Recommended Skills For You</h3>', unsafe_allow_html=True) 
-                        recommended_skills = ['Data Visualization','Predictive Analysis','Statistical Modeling','Data Mining','Clustering & Classification','Data Analytics','Quantitative Analysis','Web Scraping','ML Algorithms','Keras','Pytorch','Probability','Scikit-learn','Tensorflow',"Flask",'Streamlit']
+                        recommended_skills = [
+                            'Python', 'NumPy', 'Pandas',
+                            'Matplotlib', 'Seaborn',
+                            'Scikit-Learn', 'TensorFlow', 'Keras', 'PyTorch',
+                            'Machine Learning Algorithms',
+                            'Deep Learning Basics',
+                            'Data Cleaning', 'Feature Engineering',
+                            'Model Evaluation',
+                            'NLP Basics', 'Computer Vision Basics',
+                            'SQL for Data Analysis'
+                        ]
                         recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='2')
                         rec_course = course_recommender(ds_course)
                 
                     elif reco_field == 'Web Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True) 
-                        recommended_skills = ['React','Django','Node JS','React JS','php','laravel','Magento','wordpress','Javascript','Angular JS','c#','Flask','SDK']
+                        recommended_skills = [
+                            'HTML5', 'CSS3', 'JavaScript', 'TypeScript',
+                            'React', 'React Hooks', 'Redux',
+                            'Node.js', 'Express.js',
+                            'REST APIs', 'JWT Authentication',
+                            'MongoDB', 'Mongoose',
+                            'MySQL', 'PostgreSQL',
+                            'Git', 'GitHub', 
+                            'Responsive Design', 'Tailwind CSS', 'Bootstrap',
+                            'Docker (Basics)', 'CI/CD (Basics)'
+                        ]
                         recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='3')
                         rec_course = course_recommender(web_course)
                 
                     elif reco_field == 'Android Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
-                        recommended_skills = ['Android','Android development','Flutter','Kotlin','XML','Java','Kivy','GIT','SDK','SQLite']
+                        recommended_skills = [
+                            'Kotlin', 'Java', 'Android Studio',
+                            'XML Layouts', 'Jetpack Components',
+                            'Firebase', 'Room Database',
+                            'Retrofit', 'REST API Integration',
+                            'MVVM Architecture',
+                            'Material Design'
+                        ]
                         recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='4')
                         rec_course = course_recommender(android_course)
                 
                     elif reco_field == 'IOS Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
-                        recommended_skills = ['IOS','IOS Development','Swift','Cocoa','Cocoa Touch','Xcode','Objective-C','SQLite','Plist','StoreKit',"UI-Kit",'AV Foundation','Auto-Layout']
+                        recommended_skills = [
+                            'Swift', 'SwiftUI',
+                            'Xcode', 'UIKit',
+                            'Cocoa Touch',
+                            'CoreData',
+                            'REST API Integration',
+                            'Auto-Layout',
+                            'MVVM Architecture'
+                        ]
                         recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='5')
                         rec_course = course_recommender(ios_course)
                 
                     elif reco_field == 'UI-UX Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
-                        recommended_skills = ['UI','User Experience','Adobe XD','Figma','Zeplin','Balsamiq','Prototyping','Wireframes','Storyframes','Adobe Photoshop','Editing','Illustrator','After Effects','Premier Pro','Indesign','Wireframe','Solid','Grasp','User Research']
+                        recommended_skills = [
+                            'Figma', 'Adobe XD',
+                            'Wireframing', 'Prototyping',
+                            'User Flow Design',
+                            'Design Systems',
+                            'User Research',
+                            'Typography', 'Color Theory',
+                            'UI Design', 'UX Writing'
+                        ]
                         recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='6')
                         rec_course = course_recommender(uiux_course)
                 else:
@@ -325,7 +476,7 @@ def run():
                 st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">💡 Resume Tips & Ideas</h3>', unsafe_allow_html=True)
                 resume_score = 0
                 
-                # Create a list of checks to perform. Each item is a tuple containing:
+                # Creating a list of checks to perform. Each item is a tuple containing:
                 # (keywords_to_check, section_name, success_message, failure_message)
                 checks = [
                     (['Objective'], 'Objective', '[+] Awesome! You have added your Career Objective', '[-] Please add your career objective...'),
@@ -336,12 +487,29 @@ def run():
                 ]
                 
                 for keywords, section_name, success_msg, failure_msg in checks:
-                    # Check if any of the keywords for the current section exist in the resume
                     if any(keyword in resume_text for keyword in keywords):
                         resume_score += 20
-                        st.markdown(f'<h5 style="text-align: left; color: #00FFE0;">{success_msg}</h5>', unsafe_allow_html=True)
+                        st.markdown(
+                            f"""
+                            <p style="font-size:23px; color:#00FF88; font-family:Poppins; margin:5px 0;">
+                                ✔ <b>{success_msg}</b>
+                            </p>
+                            """,
+                            unsafe_allow_html=True
+                        )
                     else:
-                        st.markdown(f'<h5 style="text-align: left; color: #FFFFFF;">{failure_msg}</h5>', unsafe_allow_html=True)
+                        st.markdown(
+                            f"""
+                            <p style="font-size:23px; color:#FF5555; font-family:Poppins; margin:5px 0;">
+                                ❌ <b>{failure_msg}</b>
+                            </p>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+
+
+
                 # st.subheader("**Resume Score📝**")
                 st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">Resume Score📝</h3>', unsafe_allow_html=True)
                 st.markdown(
@@ -358,7 +526,7 @@ def run():
 
                 my_bar = st.progress(0)
                 for i in range(resume_score):
-                    time.sleep(0.05)  # Make it a bit faster
+                    time.sleep(0.01)  # Make it a bit faster
                     my_bar.progress(i + 1)
                 
                 # We already have the score in the 'resume_score' variable
@@ -367,11 +535,25 @@ def run():
                 st.markdown('<div style="background: linear-gradient(90deg, #FFA500, #FF6347); color: white; padding: 10px; border-radius: 10px; font-family: \'Poppins\', sans-serif; font-size: 16px; font-weight: 600; text-align: left; margin-top: 10px;">ℹ️ Note: This score is calculated based on the content that you have in your Resume.</div>', unsafe_allow_html=True)
                 st.balloons()
 
-                insert_data(resume_data['name'], resume_data['email'], str(resume_score), timestamp,
-                              str(resume_data['no_of_pages']), reco_field, cand_level, str(resume_data['skills']),
-                              str(recommended_skills), str(rec_course))
-
-
+                contact = resume_data.get('mobile_number', 'Not Found')
+                file_name = pdf_file.name
+                
+                insert_data(
+                    resume_data['name'],
+                    resume_data['email'],
+                    resume_data['mobile_number'],   # contact
+                    resume_file_name,               # the uploaded file name
+                    str(resume_score),
+                    timestamp,
+                    str(resume_data['no_of_pages']),
+                    reco_field,
+                    cand_level,
+                    str(resume_data['skills']),
+                    str(recommended_skills),
+                    str(rec_course)
+                )
+                
+                
                 # Display a random resume video
                 display_random_video(resume_videos, "🎥 Bonus Video for Resume Writing Tips💡")
                
@@ -385,47 +567,106 @@ def run():
                 st.error('Something went wrong..')
     else:
         ## Admin Side
-        ## Admin Sidem
         st.markdown('<h6 style="text-align: left; color: white; background: linear-gradient(90deg, #4F46E5, #00C2FF); padding: 10px 12px; border-radius: 8px; font-family: \'Poppins\', sans-serif; font-weight: 600; margin: 8px 0; border: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); font-size: 1em;">✨ Welcome to Admin Dashboard</h6>', unsafe_allow_html=True)
-        ad_user = st.text_input("Username")
-        ad_password = st.text_input("Password", type='password')
-        if st.button('Login'):
-            if ad_user == st.secrets["admin"]["user"] and ad_password == st.secrets["admin"]["password"]:
-                st.success("Welcome Admin!")
-                
-                # --- Simplified Data Fetching ---
-                # Fetch data directly from the database
-                cursor.execute('''SELECT * FROM user_data''')
-                data = cursor.fetchall()
-                
-                # Define column names for the DataFrame
-                column_names = ['ID', 'Name', 'Email', 'Resume Score', 'Timestamp', 'Total Page', 
-                                'Predicted Field', 'User Level', 'Actual Skills', 'Recommended Skills', 
-                                'Recommended Course']
-
-                # Create DataFrame directly from the fetched data
-                df = pd.DataFrame(data, columns=column_names)
-                
-                # Display the data table and download link
-                st.dataframe(df)
-                st.markdown(get_table_download_link(df, 'User_Data.csv', 'Download Report'), unsafe_allow_html=True)
-                
-                # --- Chart Plotting ---
-                # The DataFrame 'df' is already clean and ready for plotting
-                
-                ## Pie chart for predicted field recommendations
-                st.subheader("**Pie-Chart for Predicted Field Recommendation**")
+        
+        # ------------------------------
+        # ADMIN LOGIN USING SESSION STATE
+        # ------------------------------
+        if "admin_logged_in" not in st.session_state:
+            st.session_state["admin_logged_in"] = False
+        
+        # SHOW LOGIN FORM ONLY IF NOT LOGGED IN
+        if not st.session_state["admin_logged_in"]:
+        
+            ad_user = st.text_input("Username")
+            ad_password = st.text_input("Password", type='password')
+        
+            if st.button("Login"):
+                if ad_user == st.secrets["admin"]["user"] and ad_password == st.secrets["admin"]["password"]:
+                    st.session_state["admin_logged_in"] = True
+                    st.success("Welcome Admin!")
+                else:
+                    st.error("Wrong ID & Password! Please try again.")
+        
+        # IF LOGGED IN → SHOW DASHBOARD
+        if st.session_state["admin_logged_in"]:
+        
+            # --- Simplified Data Fetching ---
+            cursor.execute("SELECT * FROM user_data")
+            data = cursor.fetchall()
+        
+            column_names = [
+                'ID', 'Name', 'Email', 'Contact_Number', 'Resume_File_Name',
+                'Resume Score', 'Timestamp', 'Total Page', 'Predicted Field',
+                'User Level', 'Actual Skills', 'Recommended Skills', 'Recommended Course'
+            ]
+        
+            df = pd.DataFrame(data, columns=column_names)
+        
+            st.dataframe(df)
+        
+            # --- Search & Filters ---
+            st.markdown("### 🔍 Search & Filters")
+            search_text = st.text_input("Search by Name, Email or File Name:")
+        
+            if search_text:
+                df = df[df.apply(lambda row: row.astype(str).str.contains(search_text, case=False).any(), axis=1)]
+        
+            fields = df["Predicted Field"].unique()
+            selected_field = st.selectbox("Filter by Predicted Field:", ["All"] + list(fields))
+            if selected_field != "All":
+                df = df[df["Predicted Field"] == selected_field]
+        
+            levels = df["User Level"].unique()
+            selected_level = st.selectbox("Filter by Experience Level:", ["All"] + list(levels))
+            if selected_level != "All":
+                df = df[df["User Level"] == selected_level]
+        
+            score_filter = st.selectbox("Filter by Resume Score:", ["All", "> 40", "> 60", "> 80"])
+            if score_filter == "> 40":
+                df = df[df["Resume Score"].astype(int) > 40]
+            elif score_filter == "> 60":
+                df = df[df["Resume Score"].astype(int) > 60]
+            elif score_filter == "> 80":
+                df = df[df["Resume Score"].astype(int) > 80]
+        
+            sort_option = st.selectbox(
+                "Sort by:",
+                ["None", "Name (A-Z)", "Score High → Low", "Score Low → High", "Newest First", "Oldest First"]
+            )
+            if sort_option == "Name (A-Z)":
+                df = df.sort_values(by="Name")
+            elif sort_option == "Score High → Low":
+                df = df.sort_values(by="Resume Score", ascending=False)
+            elif sort_option == "Score Low → High":
+                df = df.sort_values(by="Resume Score", ascending=True)
+            elif sort_option == "Newest First":
+                df = df.sort_values(by="Timestamp", ascending=False)
+            elif sort_option == "Oldest First":
+                df = df.sort_values(by="Timestamp", ascending=True)
+        
+            st.markdown("### 📋 Filtered Results:")
+            st.dataframe(df)
+            st.markdown(get_table_download_link(df, 'User_Data.csv', 'Download Report'), unsafe_allow_html=True)
+        
+            # ------------------------------
+            # 4.6 Dynamic Charts (Filtered DF)
+            # ------------------------------
+            st.subheader("📊 Predicted Field Distribution (Filtered)")
+            if len(df) > 0:
                 field_counts = df['Predicted Field'].value_counts()
-                fig1 = px.pie(values=field_counts.values, names=field_counts.index, title='Predicted Field according to Skills')
-                st.plotly_chart(fig1)
-
-                ### Pie chart for User's Experienced Level
-                st.subheader("**Pie-Chart for User's Experienced Level**")
-                level_counts = df['User Level'].value_counts()
-                fig2 = px.pie(values=level_counts.values, names=level_counts.index, title="User's Experience Level")
-                st.plotly_chart(fig2)
-
+                fig1 = px.pie(values=field_counts.values, names=field_counts.index, title='Predicted Field (Filtered)')
+                st.plotly_chart(fig1, use_container_width=True)
             else:
-                st.error("Wrong ID & Password! Please try again.")
-       
+                st.info("No data available for chart.")
+        
+            st.subheader("📊 User Experience Level (Filtered)")
+            if len(df) > 0:
+                level_counts = df['User Level'].value_counts()
+                fig2 = px.pie(values=level_counts.values, names=level_counts.index, title='User Experience Level (Filtered)')
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.info("No data available for chart.")
+        
+    
 run()
