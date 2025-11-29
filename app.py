@@ -1,68 +1,36 @@
 import streamlit as st
 import pandas as pd
-import base64, random
-import time, datetime
+import base64,random
+import time,datetime
 
+from pyresparser import ResumeParser
+from pdfminer.layout import LAParams
+from pdfminer.pdfpage import PDFPage
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.converter import TextConverter
+
+import io
+from streamlit_tags import st_tags
 from PIL import Image
 import pymysql
-import plotly.express as px
 
+from Courses import ds_course,web_course,android_course,ios_course,uiux_course,resume_videos,interview_videos
+
+import plotly.express as px
 import nltk
 from nltk.corpus import stopwords
-nltk.download("stopwords")
-
-import re
-import fitz  # PyMuPDF
-import spacy
 import yt_dlp
+import spacy
 
-# Load spaCy model
+from spacy.cli import download
+download("en_core_web_sm")
 nlp = spacy.load("en_core_web_sm")
 
-from Courses import (
-    ds_course, web_course, android_course,
-    ios_course, uiux_course, resume_videos, interview_videos
-)
 
 st.set_page_config(
    page_title="Resume Genie",
    page_icon='./Logo/logo1.1.png',
 )
-
-
-
-# -------- Extract full text from PDF --------
-def extract_text_from_pdf(uploaded_file):
-    text = ""
-    pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-    for page in pdf:
-        text += page.get_text()
-    return text
-
-
-# -------- Extract Name, Email, Phone --------
-def extract_basic_details(text):
-    # Email
-    email = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
-    email = email[0] if email else "Not Found"
-
-    # Phone
-    phone = re.findall(r"\+?\d[\d\s\-]{7,15}", text)
-    phone = phone[0] if phone else "Not Found"
-
-    # Name (very simple, works most cases)
-    lines = text.split("\n")
-    name = lines[0].strip() if len(lines[0]) < 40 else "Not Found"
-
-    return name, email, phone
-
-
-# -------- Extract skills --------
-def extract_skills(text, skill_keywords):
-    text_lower = text.lower()
-    found_skills = [skill for skill in skill_keywords if skill.lower() in text_lower]
-    return ", ".join(found_skills) if found_skills else "Not Found"
-
 
 def fetch_yt_video(link):
     try:
@@ -85,6 +53,37 @@ def get_table_download_link(df,filename,text):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
     return href
 
+def pdf_reader(file):
+    """
+    Reads a PDF file and extracts all its text content page by page.
+    """
+    # --- Step 1: Set up the pdfminer tools ---
+    resource_manager = PDFResourceManager()
+    # Create an in-memory text buffer (a digital notepad).
+    fake_file_handle = io.StringIO()
+    # Create a converter to turn PDF into text, writing to our in-memory buffer.
+    converter = TextConverter(resource_manager, fake_file_handle, laparams=LAParams())
+    # Create a page interpreter to process the page content.
+    page_interpreter = PDFPageInterpreter(resource_manager, converter)
+
+    # --- Step 2: Open and process the file ---
+    # Open the PDF file in "read binary" ('rb') mode.
+    with open(file, 'rb') as fh:
+        # Loop through each page of the PDF.
+        for page in PDFPage.get_pages(fh,
+                                      caching=True,
+                                      check_extractable=True):
+            # Process the content of each page.
+            page_interpreter.process_page(page)
+        
+        # --- Step 3: Retrieve the final text ---
+        # Get the full string from our in-memory notepad.
+        text = fake_file_handle.getvalue()
+
+    # --- Step 4: Clean up and return ---
+    converter.close()
+    fake_file_handle.close()
+    return text
 
 def show_pdf(file_path):
     with open(file_path, "rb") as f:
@@ -218,19 +217,10 @@ def run():
             with open(save_image_path, "wb") as f:
                 f.write(pdf_file.getbuffer())
             show_pdf(save_image_path)
-            # Step 1: Extract raw text
-            text = extract_text_from_pdf(uploaded_file)
-            
-            # Step 2: Basic details
-            name, email, phone = extract_basic_details(text)
-            
-            # Step 3: Skills based on your keyword list
-            skill_keywords = ["python","java","html","css","react","node","sql","machine learning","data analysis"]
-            skills = extract_skills(text, skill_keywords)
-
+            resume_data = ResumeParser(save_image_path).get_extracted_data()
             if resume_data:
                 ## Get the whole resume data
-                resume_text = text
+                resume_text = pdf_reader(save_image_path)
 
                 # Main Title
                 st.markdown('<h1 style="text-align: left; background: linear-gradient(90deg, #4F46E5, #00C2FF); -webkit-background-clip: text; color: transparent; font-family: \'Poppins\', sans-serif; font-weight: 800; font-size: 2.5rem; margin-bottom: 20px; text-shadow: 0 0 12px rgba(124, 58, 237, 0.6), 3px 3px 6px rgba(0, 0, 0, 0.3), -1px -1px 2px rgba(255, 255, 255, 0.2); letter-spacing: -0.5px;">✨ Resume Genie Analysis</h1>', unsafe_allow_html=True)
@@ -352,9 +342,8 @@ def run():
                     skills_list = raw_skills
                 
                 # Show cleaned skills
-                st.markdown("### 🧠 Extracted Skills:")
-                st.write(", ".join(skills_list))
-                keywords = skills_list
+                keywords = st_tags(label='', text='See our skills recommendation below', value=skills_list, key='1')
+
 
                 reco_field = ''
                 rec_course = ''
@@ -411,16 +400,8 @@ def run():
                             'NLP Basics', 'Computer Vision Basics',
                             'SQL for Data Analysis'
                         ]
-                        st.markdown("### 🎯 Recommended Skills (Data Science):")
-                        recommended_keywords = st.multiselect(
-                            "Select recommended skills for Data Science:",
-                            options=recommended_skills,
-                            default=recommended_skills,
-                            key="ds_reco"
-                        )
-                        
+                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='2')
                         rec_course = course_recommender(ds_course)
-
                 
                     elif reco_field == 'Web Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True) 
@@ -435,16 +416,8 @@ def run():
                             'Responsive Design', 'Tailwind CSS', 'Bootstrap',
                             'Docker (Basics)', 'CI/CD (Basics)'
                         ]
-                        st.markdown("### 🎯 Recommended Skills (Web Development):")
-                        recommended_keywords = st.multiselect(
-                            "Select recommended skills for Web Development:",
-                            options=recommended_skills,
-                            default=recommended_skills,
-                            key="web_reco"
-                        )
-                        
+                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='3')
                         rec_course = course_recommender(web_course)
-
                 
                     elif reco_field == 'Android Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
@@ -456,16 +429,8 @@ def run():
                             'MVVM Architecture',
                             'Material Design'
                         ]
-                        st.markdown("### 🎯 Recommended Skills (Android Development):")
-                        recommended_keywords = st.multiselect(
-                            "Select recommended skills for Android:",
-                            options=recommended_skills,
-                            default=recommended_skills,
-                            key="android_reco"
-                        )
-                        
+                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='4')
                         rec_course = course_recommender(android_course)
-                        
                 
                     elif reco_field == 'IOS Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
@@ -478,16 +443,8 @@ def run():
                             'Auto-Layout',
                             'MVVM Architecture'
                         ]
-                        st.markdown("### 🎯 Recommended Skills (iOS Development):")
-                        recommended_keywords = st.multiselect(
-                            "Select recommended skills for iOS:",
-                            options=recommended_skills,
-                            default=recommended_skills,
-                            key="ios_reco"
-                        )
-                        
+                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='5')
                         rec_course = course_recommender(ios_course)
-
                 
                     elif reco_field == 'UI-UX Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
@@ -500,16 +457,8 @@ def run():
                             'Typography', 'Color Theory',
                             'UI Design', 'UX Writing'
                         ]
-                        st.markdown("### 🎯 Recommended Skills (UI/UX Design):")
-                        recommended_keywords = st.multiselect(
-                            "Select recommended skills for UI/UX:",
-                            options=recommended_skills,
-                            default=recommended_skills,
-                            key="uiux_reco"
-                        )
-                        
+                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='6')
                         rec_course = course_recommender(uiux_course)
-
                 else:
                     # Handle the case where no relevant skills were found
                     st.warning("Could not determine a career field based on the skills provided in the resume.")
@@ -590,20 +539,20 @@ def run():
                 file_name = pdf_file.name
                 
                 insert_data(
-                    name,                     
-                    email,                    
-                    phone,                    
-                    resume_file_name,         
-                    str(resume_score),        
-                    timestamp,                
-                    str(no_of_pages),         
-                    reco_field,               
-                    cand_level,               
-                    skills,                   
-                    recommended_skills,       
-                    rec_course                
+                    resume_data['name'],
+                    resume_data['email'],
+                    resume_data['mobile_number'],   # contact
+                    resume_file_name,               # the uploaded file name
+                    str(resume_score),
+                    timestamp,
+                    str(resume_data['no_of_pages']),
+                    reco_field,
+                    cand_level,
+                    str(resume_data['skills']),
+                    str(recommended_skills),
+                    str(rec_course)
                 )
-                                
+                
                 
                 # Display a random resume video
                 display_random_video(resume_videos, "🎥 Bonus Video for Resume Writing Tips💡")
