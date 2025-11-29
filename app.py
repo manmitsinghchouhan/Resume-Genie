@@ -1,36 +1,69 @@
 import streamlit as st
 import pandas as pd
-import base64,random
-import time,datetime
+import base64, random
+import time, datetime
 
-from pyresparser import ResumeParser
-from pdfminer.layout import LAParams
-from pdfminer.pdfpage import PDFPage
-from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
-from pdfminer.converter import TextConverter
-
-import io
 from streamlit_tags import st_tags
 from PIL import Image
 import pymysql
-
-from Courses import ds_course,web_course,android_course,ios_course,uiux_course,resume_videos,interview_videos
-
 import plotly.express as px
+
 import nltk
 from nltk.corpus import stopwords
-import yt_dlp
-import spacy
+nltk.download("stopwords")
 
-from spacy.cli import download
-download("en_core_web_sm")
+import re
+import fitz  # PyMuPDF
+import spacy
+import yt_dlp
+
+# Load spaCy model
 nlp = spacy.load("en_core_web_sm")
 
+from Courses import (
+    ds_course, web_course, android_course,
+    ios_course, uiux_course, resume_videos, interview_videos
+)
 
 st.set_page_config(
    page_title="Resume Genie",
    page_icon='./Logo/logo1.1.png',
 )
+
+
+
+# -------- Extract full text from PDF --------
+def extract_text_from_pdf(uploaded_file):
+    text = ""
+    pdf = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+    for page in pdf:
+        text += page.get_text()
+    return text
+
+
+# -------- Extract Name, Email, Phone --------
+def extract_basic_details(text):
+    # Email
+    email = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text)
+    email = email[0] if email else "Not Found"
+
+    # Phone
+    phone = re.findall(r"\+?\d[\d\s\-]{7,15}", text)
+    phone = phone[0] if phone else "Not Found"
+
+    # Name (very simple, works most cases)
+    lines = text.split("\n")
+    name = lines[0].strip() if len(lines[0]) < 40 else "Not Found"
+
+    return name, email, phone
+
+
+# -------- Extract skills --------
+def extract_skills(text, skill_keywords):
+    text_lower = text.lower()
+    found_skills = [skill for skill in skill_keywords if skill.lower() in text_lower]
+    return ", ".join(found_skills) if found_skills else "Not Found"
+
 
 def fetch_yt_video(link):
     try:
@@ -53,37 +86,6 @@ def get_table_download_link(df,filename,text):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
     return href
 
-def pdf_reader(file):
-    """
-    Reads a PDF file and extracts all its text content page by page.
-    """
-    # --- Step 1: Set up the pdfminer tools ---
-    resource_manager = PDFResourceManager()
-    # Create an in-memory text buffer (a digital notepad).
-    fake_file_handle = io.StringIO()
-    # Create a converter to turn PDF into text, writing to our in-memory buffer.
-    converter = TextConverter(resource_manager, fake_file_handle, laparams=LAParams())
-    # Create a page interpreter to process the page content.
-    page_interpreter = PDFPageInterpreter(resource_manager, converter)
-
-    # --- Step 2: Open and process the file ---
-    # Open the PDF file in "read binary" ('rb') mode.
-    with open(file, 'rb') as fh:
-        # Loop through each page of the PDF.
-        for page in PDFPage.get_pages(fh,
-                                      caching=True,
-                                      check_extractable=True):
-            # Process the content of each page.
-            page_interpreter.process_page(page)
-        
-        # --- Step 3: Retrieve the final text ---
-        # Get the full string from our in-memory notepad.
-        text = fake_file_handle.getvalue()
-
-    # --- Step 4: Clean up and return ---
-    converter.close()
-    fake_file_handle.close()
-    return text
 
 def show_pdf(file_path):
     with open(file_path, "rb") as f:
@@ -217,7 +219,16 @@ def run():
             with open(save_image_path, "wb") as f:
                 f.write(pdf_file.getbuffer())
             show_pdf(save_image_path)
-            resume_data = ResumeParser(save_image_path).get_extracted_data()
+            # Step 1: Extract raw text
+            text = extract_text_from_pdf(uploaded_file)
+            
+            # Step 2: Basic details
+            name, email, phone = extract_basic_details(text)
+            
+            # Step 3: Skills based on your keyword list
+            skill_keywords = ["python","java","html","css","react","node","sql","machine learning","data analysis"]
+            skills = extract_skills(text, skill_keywords)
+
             if resume_data:
                 ## Get the whole resume data
                 resume_text = pdf_reader(save_image_path)
@@ -539,20 +550,20 @@ def run():
                 file_name = pdf_file.name
                 
                 insert_data(
-                    resume_data['name'],
-                    resume_data['email'],
-                    resume_data['mobile_number'],   # contact
-                    resume_file_name,               # the uploaded file name
-                    str(resume_score),
-                    timestamp,
-                    str(resume_data['no_of_pages']),
-                    reco_field,
-                    cand_level,
-                    str(resume_data['skills']),
-                    str(recommended_skills),
-                    str(rec_course)
+                    name,                     
+                    email,                    
+                    phone,                    
+                    resume_file_name,         
+                    str(resume_score),        
+                    timestamp,                
+                    str(no_of_pages),         
+                    reco_field,               
+                    cand_level,               
+                    skills,                   
+                    recommended_skills,       
+                    rec_course                
                 )
-                
+                                
                 
                 # Display a random resume video
                 display_random_video(resume_videos, "🎥 Bonus Video for Resume Writing Tips💡")
