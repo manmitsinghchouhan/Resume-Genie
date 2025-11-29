@@ -230,7 +230,7 @@ def run():
 
             if resume_data:
                 ## Get the whole resume data
-                resume_text = pdf_reader(save_image_path)
+                resume_text = text
 
                 # Main Title
                 st.markdown('<h1 style="text-align: left; background: linear-gradient(90deg, #4F46E5, #00C2FF); -webkit-background-clip: text; color: transparent; font-family: \'Poppins\', sans-serif; font-weight: 800; font-size: 2.5rem; margin-bottom: 20px; text-shadow: 0 0 12px rgba(124, 58, 237, 0.6), 3px 3px 6px rgba(0, 0, 0, 0.3), -1px -1px 2px rgba(255, 255, 255, 0.2); letter-spacing: -0.5px;">✨ Resume Genie Analysis</h1>', unsafe_allow_html=True)
