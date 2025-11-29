@@ -353,8 +353,9 @@ def run():
                     skills_list = raw_skills
                 
                 # Show cleaned skills
-                keywords = st_tags(label='', text='See our skills recommendation below', value=skills_list, key='1')
-
+                st.markdown("### 🧠 Extracted Skills:")
+                st.write(", ".join(skills_list))
+                keywords = skills_list
 
                 reco_field = ''
                 rec_course = ''
@@ -411,8 +412,16 @@ def run():
                             'NLP Basics', 'Computer Vision Basics',
                             'SQL for Data Analysis'
                         ]
-                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='2')
+                        st.markdown("### 🎯 Recommended Skills (Data Science):")
+                        recommended_keywords = st.multiselect(
+                            "Select recommended skills for Data Science:",
+                            options=recommended_skills,
+                            default=recommended_skills,
+                            key="ds_reco"
+                        )
+                        
                         rec_course = course_recommender(ds_course)
+
                 
                     elif reco_field == 'Web Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True) 
@@ -427,8 +436,16 @@ def run():
                             'Responsive Design', 'Tailwind CSS', 'Bootstrap',
                             'Docker (Basics)', 'CI/CD (Basics)'
                         ]
-                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='3')
+                        st.markdown("### 🎯 Recommended Skills (Web Development):")
+                        recommended_keywords = st.multiselect(
+                            "Select recommended skills for Web Development:",
+                            options=recommended_skills,
+                            default=recommended_skills,
+                            key="web_reco"
+                        )
+                        
                         rec_course = course_recommender(web_course)
+
                 
                     elif reco_field == 'Android Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
@@ -440,8 +457,16 @@ def run():
                             'MVVM Architecture',
                             'Material Design'
                         ]
-                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='4')
+                        st.markdown("### 🎯 Recommended Skills (Android Development):")
+                        recommended_keywords = st.multiselect(
+                            "Select recommended skills for Android:",
+                            options=recommended_skills,
+                            default=recommended_skills,
+                            key="android_reco"
+                        )
+                        
                         rec_course = course_recommender(android_course)
+                        
                 
                     elif reco_field == 'IOS Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
@@ -454,8 +479,16 @@ def run():
                             'Auto-Layout',
                             'MVVM Architecture'
                         ]
-                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='5')
+                        st.markdown("### 🎯 Recommended Skills (iOS Development):")
+                        recommended_keywords = st.multiselect(
+                            "Select recommended skills for iOS:",
+                            options=recommended_skills,
+                            default=recommended_skills,
+                            key="ios_reco"
+                        )
+                        
                         rec_course = course_recommender(ios_course)
+
                 
                     elif reco_field == 'UI-UX Development':
                         st.markdown('<h3 style="text-align: left; color: #00C2FF; font-family: Poppins, sans-serif; font-weight: 600; margin-top: 30px;">🚀 Recommended Skills for You</h3>', unsafe_allow_html=True)
@@ -468,8 +501,16 @@ def run():
                             'Typography', 'Color Theory',
                             'UI Design', 'UX Writing'
                         ]
-                        recommended_keywords = st_tags(label='', text='Recommended skills generated from System', value=recommended_skills, key='6')
+                        st.markdown("### 🎯 Recommended Skills (UI/UX Design):")
+                        recommended_keywords = st.multiselect(
+                            "Select recommended skills for UI/UX:",
+                            options=recommended_skills,
+                            default=recommended_skills,
+                            key="uiux_reco"
+                        )
+                        
                         rec_course = course_recommender(uiux_course)
+
                 else:
                     # Handle the case where no relevant skills were found
                     st.warning("Could not determine a career field based on the skills provided in the resume.")
